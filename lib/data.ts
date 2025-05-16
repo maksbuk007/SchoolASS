@@ -1,6 +1,7 @@
+import { getStudentGradesFromSheets } from "./google-sheets-server"
+
 export interface UpcomingTest {
-  subjectId: string
-  subjectName: string
+  subject: string
   date: string
   description: string
 }
@@ -56,89 +57,63 @@ interface Subject {
   name: string
 }
 
-// Массив предметов
-export const subjects: Subject[] = [
-  { id: "bel_lang", name: "Бел. яз." },
-  { id: "bel_lit", name: "Бел. лит." },
-  { id: "rus_lang", name: "Русск. яз." },
-  { id: "rus_lit", name: "Русск. лит." },
-  { id: "foreign_lang", name: "Ин. яз." },
-  { id: "math", name: "Математика" },
-  { id: "informatics", name: "Информатика" },
-  { id: "world_history", name: "Всем. истор." },
-  { id: "bel_history", name: "Истор. Бел." },
-  { id: "social_studies", name: "Обществов." },
-  { id: "geography", name: "География" },
-  { id: "biology", name: "Биология" },
-  { id: "physics", name: "Физика" },
-  { id: "astronomy", name: "Астрономия" },
-  { id: "chemistry", name: "Химия" },
-  { id: "physical_edu", name: "Физ-ра" },
-  { id: "dp_mp", name: "ДП/МП" },
+// Список предметов
+export const subjects = [
+  { id: "Бел. яз.", name: "Белорусский язык" },
+  { id: "Бел. лит.", name: "Белорусская литература" },
+  { id: "Рус. яз.", name: "Русский язык" },
+  { id: "Рус. лит.", name: "Русская литература" },
+  { id: "Ин. яз.", name: "Иностранный язык" },
+  { id: "Матем.", name: "Математика" },
+  { id: "Информ.", name: "Информатика" },
+  { id: "Ист. Бел.", name: "История Беларуси" },
+  { id: "Всем. ист.", name: "Всемирная история" },
+  { id: "Общество", name: "Обществоведение" },
+  { id: "География", name: "География" },
+  { id: "Биология", name: "Биология" },
+  { id: "Физика", name: "Физика" },
+  { id: "Химия", name: "Химия" },
+  { id: "Астрономия", name: "Астрономия" },
+  { id: "Физ-ра", name: "Физическая культура и здоровье" },
+  { id: "ДП/МП", name: "Допризывная и медицинская подготовка" },
 ]
 
 // Функция для вычисления среднего балла
-export const calculateAverage = (grades: any[], roundQuarter = false): number => {
-  if (!grades || grades.length === 0) {
-    return 0
-  }
+export function calculateAverage(grades: number[], roundToInt = true): number {
+  if (!grades || grades.length === 0) return 0
 
-  const sum = grades.reduce((acc: number, grade: any) => acc + grade.value, 0)
-  const average = sum / grades.length
+  // Фильтруем только числовые значения
+  const validGrades = grades.filter((grade) => typeof grade === "number" && !isNaN(grade))
+  if (validGrades.length === 0) return 0
 
-  return roundQuarter ? Math.round(average) : Number(average.toFixed(2))
+  const sum = validGrades.reduce((acc, grade) => acc + grade, 0)
+  const average = sum / validGrades.length
+
+  return roundToInt ? Math.round(average) : average
 }
 
+// Четверти
 export const quarters = [
-  { id: "current", name: "Текущая" },
-  { id: "2025-Q1", name: "1 четверть" },
-  { id: "2025-Q2", name: "2 четверть" },
-  { id: "2025-Q3", name: "3 четверть" },
+  { id: "2023-Q1", name: "I четверть 2023-2024" },
+  { id: "2023-Q2", name: "II четверть 2023-2024" },
+  { id: "2024-Q3", name: "III четверть 2023-2024" },
+  { id: "2024-Q4", name: "IV четверть 2023-2024" },
+  { id: "current", name: "Текущая четверть" },
 ]
 
 // Функция для получения данных ученика
-export const getStudentData = async (studentId: string): Promise<{ data: StudentGrades; lastUpdate: string }> => {
+export async function getStudentData(studentId: string) {
   try {
-    // Получаем данные из API
-    const response = await fetch(`/api/student-grades?studentId=${studentId}`)
+    const result = await getStudentGradesFromSheets(studentId)
 
-    const result = await response.json()
-    console.log("Результат запроса оценок студента:", result)
-
-    if (result.success && result.data) {
-      return {
-        data: result.data,
-        lastUpdate: result.lastUpdate || new Date().toLocaleString(),
-      }
+    if (!result) {
+      throw new Error("Не удалось получить данные из Google Sheets")
     }
 
-    throw new Error(result.message || "Данные не получены")
+    return result
   } catch (error) {
     console.error("Ошибка при получении данных ученика:", error)
-
-    // В случае ошибки возвращаем пустую структуру данных
-    const emptyData: StudentGrades = {
-      studentId,
-      subjects: {},
-    }
-
-    // Инициализируем пустую структуру для всех предметов
-    subjects.forEach((subject) => {
-      emptyData.subjects[subject.id] = {
-        current: [],
-        quarters: {
-          "2025-Q1": [],
-          "2025-Q2": [],
-          "2025-Q3": [],
-          "2025-Q4": [],
-        },
-      }
-    })
-
-    return {
-      data: emptyData,
-      lastUpdate: new Date().toLocaleString(),
-    }
+    throw error
   }
 }
 
