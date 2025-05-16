@@ -235,6 +235,13 @@ export async function getStudentGradesFromSheets(studentId: string) {
   return { data: response.data, lastUpdate: response.lastUpdate || "" }
 }
 
+// Добавим функцию для получения архивных оценок
+export async function getStudentArchiveGradesFromSheets(studentId: string) {
+  const response = await fetchAPI(`archive-grades?studentId=${studentId}`)
+  if (!response.success) return null
+  return { data: response.data }
+}
+
 // Function to get upcoming tests
 export async function getUpcomingTests() {
   const response = await fetchAPI("upcoming-tests")

@@ -2,124 +2,69 @@
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth-provider"
-import { getStudentData, subjects, calculateAverage, quarters } from "@/lib/data"
+import { subjects } from "@/lib/data"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
 import { AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
+interface ArchiveGrades {
+  studentId: string
+  subjects: {
+    [subjectId: string]: {
+      Q1: number
+      Q2: number
+      Q3: number
+      Q4: number
+      year: number
+    }
+  }
+}
+
 export default function ArchivePage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
-  // Обновим тип состояния
-  const [gradesData, setGradesData] = useState<any>(null)
-  const [lastUpdate, setLastUpdate] = useState<string>("")
+  const [archiveData, setArchiveData] = useState<ArchiveGrades | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Получаем только прошлые четверти (без текущей)
-  const pastQuarters = quarters.filter((q) => q.id !== "current")
-
-  // Обновим группировку четвертей по учебным годам
-  const academicYears = {
-    "2024-2025": quarters,
-  }
-
   useEffect(() => {
-    // Обновим функцию loadData
-    const loadData = async () => {
+    const loadArchiveData = async () => {
       if (user) {
         try {
           setLoading(true)
           setError(null)
-          const result = await getStudentData(user.id)
-          setGradesData(result.data)
-          setLastUpdate(result.lastUpdate || "")
+
+          const response = await fetch(`/api/archive-grades?studentId=${user.id}`)
+          const result = await response.json()
+
+          if (result.success && result.data) {
+            setArchiveData(result.data)
+          } else {
+            setError(result.message || "Не удалось загрузить архивные данные")
+          }
         } catch (error) {
-          console.error("Ошибка при загрузке данных:", error)
-          setError("Не удалось загрузить данные оценок. Используются локальные данные.")
+          console.error("Ошибка при загрузке архивных данных:", error)
+          setError("Не удалось загрузить архивные данные")
         } finally {
           setLoading(false)
         }
       }
     }
 
-    loadData()
+    loadArchiveData()
   }, [user])
 
-  // Определение цвета для среднего балла (10-балльная система)
-  const getAverageColor = (value: number) => {
+  // Определение цвета для оценки (10-балльная система)
+  const getGradeColor = (value: number) => {
+    if (value === 0) return "text-muted-foreground"
     if (value >= 9) return "text-green-600 dark:text-green-500"
     if (value >= 7) return "text-green-500 dark:text-green-400"
     if (value >= 5) return "text-blue-500 dark:text-blue-400"
     if (value >= 3) return "text-yellow-500 dark:text-yellow-400"
     if (value >= 2) return "text-orange-500 dark:text-orange-400"
     return "text-red-500 dark:text-red-400"
-  }
-
-  // Расчет среднего балла за год по предмету с точностью до сотых
-  const calculateYearlyAverage = (subjectId: string, yearQuarters: typeof quarters) => {
-    if (!gradesData) return 0
-
-    const subjectData = gradesData.subjects[subjectId]
-    if (!subjectData) return 0
-
-    let allGrades: any[] = []
-
-    yearQuarters.forEach((quarter) => {
-      if (quarter.id === "current") {
-        allGrades = [...allGrades, ...subjectData.current]
-      } else if (subjectData.quarters[quarter.id]) {
-        allGrades = [...allGrades, ...subjectData.quarters[quarter.id]]
-      }
-    })
-
-    // Используем точность до сотых для годовой оценки
-    return calculateAverage(allGrades, false)
-  }
-
-  // Расчет среднего балла по четверти для всех предметов с точностью до сотых
-  const calculateQuarterAverageAllSubjects = (quarter: string) => {
-    if (!gradesData) return 0
-
-    let allGrades: any[] = []
-
-    subjects.forEach((subject) => {
-      const subjectData = gradesData.subjects[subject.id]
-      if (!subjectData) return
-
-      if (quarter === "current") {
-        allGrades = [...allGrades, ...subjectData.current]
-      } else if (subjectData.quarters[quarter]) {
-        allGrades = [...allGrades, ...subjectData.quarters[quarter]]
-      }
-    })
-
-    return calculateAverage(allGrades, false)
-  }
-
-  // Расчет среднего балла по всем предметам за год с точностью до сотых
-  const calculateYearAverageAllSubjects = (yearQuarters: typeof quarters) => {
-    if (!gradesData) return 0
-
-    let allGrades: any[] = []
-
-    subjects.forEach((subject) => {
-      const subjectData = gradesData.subjects[subject.id]
-      if (!subjectData) return
-
-      yearQuarters.forEach((quarter) => {
-        if (quarter.id === "current") {
-          allGrades = [...allGrades, ...subjectData.current]
-        } else if (subjectData.quarters[quarter.id]) {
-          allGrades = [...allGrades, ...subjectData.quarters[quarter.id]]
-        }
-      })
-    })
-
-    return calculateAverage(allGrades, false)
   }
 
   if (loading) {
@@ -133,12 +78,10 @@ export default function ArchivePage() {
 
   return (
     <div className="space-y-4">
-      {/* В блоке return добавим отображение даты последнего обновления */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Архив оценок</h2>
         <div className="flex flex-col items-end">
-          <p className="text-muted-foreground">Учебный год 2024-2025</p>
-          {lastUpdate && <p className="text-xs text-muted-foreground">Обновлено: {lastUpdate}</p>}
+          <p className="text-muted-foreground">Учебный год 2023-2024</p>
           {user?.role === "student" && (
             <p className="text-sm font-medium">
               {user.name}, {user.class} класс
@@ -156,102 +99,74 @@ export default function ArchivePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Архив оценок по учебным годам</CardTitle>
-          <CardDescription>Просмотр оценок за все прошедшие учебные периоды</CardDescription>
+          <CardTitle>Архив оценок за прошлый учебный год</CardTitle>
+          <CardDescription>Просмотр оценок за все четверти прошлого учебного года</CardDescription>
         </CardHeader>
         <CardContent>
-          <Accordion type="single" collapsible className="w-full" defaultValue="2024-2025">
-            {Object.entries(academicYears).map(([year, yearQuarters]) => (
-              <AccordionItem key={year} value={year}>
-                <AccordionTrigger className="text-lg font-semibold">Учебный год {year}</AccordionTrigger>
-                <AccordionContent>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[200px]">Предмет</TableHead>
-                          {yearQuarters.map((quarter) => (
-                            <TableHead key={quarter.id} className="text-center">
-                              {quarter.name.replace("2024-2025", "")}
-                            </TableHead>
-                          ))}
-                          <TableHead className="text-right">Годовая</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {subjects.map((subject) => {
-                          const yearlyAverage = calculateYearlyAverage(subject.id, yearQuarters)
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[200px]">Предмет</TableHead>
+                  <TableHead className="text-center">I четверть</TableHead>
+                  <TableHead className="text-center">II четверть</TableHead>
+                  <TableHead className="text-center">III четверть</TableHead>
+                  <TableHead className="text-center">IV четверть</TableHead>
+                  <TableHead className="text-right">Годовая</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {subjects.map((subject) => {
+                  const subjectGrades = archiveData?.subjects[subject.id] || { Q1: 0, Q2: 0, Q3: 0, Q4: 0, year: 0 }
 
-                          return (
-                            <TableRow key={subject.id}>
-                              <TableCell className="font-medium">{subject.name}</TableCell>
-
-                              {yearQuarters.map((quarter) => {
-                                const subjectData = gradesData?.subjects[subject.id]
-                                let quarterGrades = []
-
-                                if (quarter.id === "current") {
-                                  quarterGrades = subjectData?.current || []
-                                } else {
-                                  quarterGrades = subjectData?.quarters[quarter.id] || []
-                                }
-
-                                // Для четвертных оценок используем точность до сотых
-                                const average = calculateAverage(quarterGrades, false)
-
-                                return (
-                                  <TableCell key={quarter.id} className="text-center">
-                                    {average > 0 ? (
-                                      <Badge variant="outline" className={`${getAverageColor(average)}`}>
-                                        {average.toFixed(2)}
-                                      </Badge>
-                                    ) : (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </TableCell>
-                                )
-                              })}
-
-                              <TableCell className={`text-right font-bold ${getAverageColor(yearlyAverage)}`}>
-                                {yearlyAverage > 0 ? yearlyAverage.toFixed(2) : "—"}
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                        {/* Строка со средним баллом */}
-                        <TableRow className="font-bold">
-                          <TableCell>Средний балл</TableCell>
-                          {yearQuarters.map((quarter) => {
-                            const quarterAverage = calculateQuarterAverageAllSubjects(quarter.id)
-
-                            return (
-                              <TableCell key={quarter.id} className={`text-center ${getAverageColor(quarterAverage)}`}>
-                                {quarterAverage > 0 ? (
-                                  <Badge variant="outline" className={`${getAverageColor(quarterAverage)}`}>
-                                    {quarterAverage.toFixed(2)}
-                                  </Badge>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </TableCell>
-                            )
-                          })}
-
-                          <TableCell
-                            className={`text-right ${getAverageColor(calculateYearAverageAllSubjects(yearQuarters))}`}
-                          >
-                            {calculateYearAverageAllSubjects(yearQuarters) > 0
-                              ? calculateYearAverageAllSubjects(yearQuarters).toFixed(2)
-                              : "—"}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
+                  return (
+                    <TableRow key={subject.id}>
+                      <TableCell className="font-medium">{subject.name}</TableCell>
+                      <TableCell className="text-center">
+                        {subjectGrades.Q1 > 0 ? (
+                          <Badge variant="outline" className={getGradeColor(subjectGrades.Q1)}>
+                            {subjectGrades.Q1}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {subjectGrades.Q2 > 0 ? (
+                          <Badge variant="outline" className={getGradeColor(subjectGrades.Q2)}>
+                            {subjectGrades.Q2}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {subjectGrades.Q3 > 0 ? (
+                          <Badge variant="outline" className={getGradeColor(subjectGrades.Q3)}>
+                            {subjectGrades.Q3}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {subjectGrades.Q4 > 0 ? (
+                          <Badge variant="outline" className={getGradeColor(subjectGrades.Q4)}>
+                            {subjectGrades.Q4}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className={`text-right font-bold ${getGradeColor(subjectGrades.year)}`}>
+                        {subjectGrades.year > 0 ? subjectGrades.year : "—"}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
